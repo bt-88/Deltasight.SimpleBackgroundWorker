@@ -51,7 +51,7 @@ public class SimpleBackgroundWorkerHost : BackgroundService
                     _semaphore.Release();
                 }
             }
-            catch (OperationCanceledException e)
+            catch (OperationCanceledException)
             {
                 // Ignore exception that is thrown on cancelling
             }
