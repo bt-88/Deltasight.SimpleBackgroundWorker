@@ -12,9 +12,11 @@ public class SimpleBackgroundWorker : ISimpleSimpleSimpleBackgroundWorker
     }
 
     public ValueTask QueueAsync(Func<CancellationToken, Task> workItem)
-    {
-        return _queue.Writer.WriteAsync(workItem);
-    }
+        => _queue.Writer.WriteAsync(workItem);
+
+    public bool TryQueue(Func<CancellationToken, Task> workItem)
+        => _queue.Writer.TryWrite(workItem);
+
 
     public ValueTask<Func<CancellationToken,Task>> DequeueAsync(CancellationToken cancellationToken)
         => _queue.Reader.ReadAsync(cancellationToken);
