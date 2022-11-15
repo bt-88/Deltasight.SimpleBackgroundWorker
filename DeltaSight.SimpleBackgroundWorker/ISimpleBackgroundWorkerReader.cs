@@ -2,5 +2,5 @@
 
 public interface ISimpleBackgroundWorkerReader
 {
-    ValueTask<Func<CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken);
+    ValueTask<BackgroundWorkItem> DequeueAsync(CancellationToken cancellationToken);
 }

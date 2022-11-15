@@ -2,22 +2,32 @@
 
 namespace DeltaSight.SimpleBackgroundWorker;
 
-public class SimpleBackgroundWorker : ISimpleSimpleSimpleBackgroundWorker
+public class SimpleBackgroundWorker : ISimpleBackgroundWorker
 {
-    private readonly Channel<Func<CancellationToken, Task>> _queue;
+    private readonly Channel<BackgroundWorkItem> _queue;
 
     public SimpleBackgroundWorker(UnboundedChannelOptions? options)
     {
-        _queue = Channel.CreateUnbounded<Func<CancellationToken, Task>>(options ?? new UnboundedChannelOptions());
+        _queue = Channel.CreateUnbounded<BackgroundWorkItem>(options ?? new UnboundedChannelOptions());
     }
-
-    public ValueTask QueueAsync(Func<CancellationToken, Task> workItem)
+    
+    public ValueTask QueueAsync(BackgroundWorkItem workItem)
         => _queue.Writer.WriteAsync(workItem);
-
-    public bool TryQueue(Func<CancellationToken, Task> workItem)
+    
+    public bool TryQueue(BackgroundWorkItem workItem)
         => _queue.Writer.TryWrite(workItem);
 
+    public int TryQueue(IEnumerable<BackgroundWorkItem> workItems) => workItems.Count(TryQueue);
 
-    public ValueTask<Func<CancellationToken,Task>> DequeueAsync(CancellationToken cancellationToken)
+    public async ValueTask QueueAsync(IEnumerable<BackgroundWorkItem> workItems)
+    {
+        foreach (var item in workItems)
+        {
+            await QueueAsync(item);
+        }
+    }
+
+
+    public ValueTask<BackgroundWorkItem> DequeueAsync(CancellationToken cancellationToken)
         => _queue.Reader.ReadAsync(cancellationToken);
 }

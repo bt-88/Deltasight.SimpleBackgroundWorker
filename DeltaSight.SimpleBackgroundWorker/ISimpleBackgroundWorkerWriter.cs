@@ -2,7 +2,10 @@
 
 public interface ISimpleBackgroundWorkerWriter
 {
-    ValueTask QueueAsync(Func<CancellationToken, Task> workItem);
+    ValueTask QueueAsync(BackgroundWorkItem workItem);
 
-    bool TryQueue(Func<CancellationToken, Task> workItem);
+    bool TryQueue(BackgroundWorkItem workItem);
+
+    int TryQueue(IEnumerable<BackgroundWorkItem> workItems);
+    ValueTask QueueAsync(IEnumerable<BackgroundWorkItem> workItems);
 }

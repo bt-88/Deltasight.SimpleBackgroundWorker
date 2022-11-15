@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -5,89 +6,73 @@ namespace DeltaSight.SimpleBackgroundWorker.Tests;
 
 public class Tests
 {
+
     [Test]
-    public async Task Test_WithOneDegreeOfParallelism()
+    public async Task Test_WithManyDegreesOfParallelism()
     {
+        var count = 100;
+        var countWorkers = 10;
+        var m = count / countWorkers;
+        
         var host = new HostBuilder()
             .ConfigureServices(services =>
             {
-                services.AddSimpleBackgroundWorker(options => options.MaxDegreesOfParallelism = 1);
+                services.AddSimpleBackgroundWorker(options => options.MaxDegreesOfParallelism = countWorkers);
             })
             .Build();
 
         await host.StartAsync();
 
         var bgWorker = host.Services.GetRequiredService<ISimpleBackgroundWorkerWriter>();
-
-        var now = DateTime.Now;
         
-        await bgWorker.QueueAsync(t =>
-        {
-            AssertTimeSpanIs(now, TimeSpan.FromSeconds(0));
+        var ms = 100;
 
-            return Task.CompletedTask;
-        });
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t =>
-        {
-            AssertTimeSpanIs(now, TimeSpan.FromSeconds(1));
+        var semaphore = new SemaphoreSlim(0, count);
 
-            return Task.CompletedTask;
-        });
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t =>
-        {
-            AssertTimeSpanIs(now, TimeSpan.FromSeconds(2));
-
-            return Task.CompletedTask;
-        });
-    }
-    
-    [Test]
-    public async Task Test_WithTwoDegreesOfParallelism()
-    {
-        var host = new HostBuilder()
-            .ConfigureServices(services =>
+        var ended = new ConcurrentBag<DateTime>();
+        
+        var jobs = Enumerable.Range(1, count)
+            .Select(i => new BackgroundWorkItem(async t =>
             {
-                services.AddSimpleBackgroundWorker(options => options.MaxDegreesOfParallelism = 2);
-            })
-            .Build();
+                try
+                {
+                    await Task.Delay(ms, t);
+                    ended.Add(DateTime.Now);
+                    semaphore.Release();
+                }
+                catch (Exception e)
+                {
+                    Assert.Fail(e.Message);
+                }
+            }, $"Job {i}", e =>
+            {
+                Assert.Fail(e.Message);
 
-        await host.StartAsync();
+                return Task.CompletedTask;
+            }))
+            .ToArray();
 
-        var bgWorker = host.Services.GetRequiredService<ISimpleBackgroundWorkerWriter>();
+        await bgWorker.QueueAsync(jobs);
 
-        var now = DateTime.Now;
+        var startAt = DateTime.Now;
         
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t =>
+        while (semaphore.CurrentCount < count)
         {
-            AssertTimeSpanIs(now, TimeSpan.FromSeconds(1));
+            await Task.Delay(1);
+        }
 
-            return Task.CompletedTask;
+        Assert.Multiple(() =>
+        {
+            Assert.That(ended, Has.Count.EqualTo(count));
+            Assert.That((ended.Max() - startAt).TotalMilliseconds, Is.EqualTo(m * ms).Within(ms));
         });
         
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t =>
-        {
-            AssertTimeSpanIs(now, TimeSpan.FromSeconds(2));
-
-            return Task.CompletedTask;
-        });
-        await bgWorker.QueueAsync(t => Task.Delay(1000, t));
-        await bgWorker.QueueAsync(t =>
-        {
-            AssertTimeSpanIs(now, TimeSpan.FromSeconds(3));
-
-            return Task.CompletedTask;
-        });
+        await host.StopAsync();
+        await host.WaitForShutdownAsync();
     }
 
     private static void AssertTimeSpanIs(DateTime start, TimeSpan ts)
     {
-        Assert.That(ts, Is.EqualTo(DateTime.Now - start).Within(ts * .1));
+        Assert.That(DateTime.Now - start, Is.EqualTo(ts).Within(ts * .05));
     }
 }
