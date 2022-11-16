@@ -28,9 +28,21 @@ public class SimpleBackgroundWorkerHost : BackgroundService
         {
             _logger.LogInformation("Starting work item {Name} ({Guid})", workItem.Name, guid);
 
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            
             var sw = Stopwatch.StartNew();
 
-            await workItem.Execute(stoppingToken).ConfigureAwait(false);
+            if (workItem.CancelAfter.HasValue)
+            {
+                cts.CancelAfter(workItem.CancelAfter.Value);
+            }
+
+            await Task.Factory.StartNew(
+                    () => workItem.Execute(cts.Token),
+                    workItem.IsLongRunning
+                        ? TaskCreationOptions.None
+                        : TaskCreationOptions.LongRunning)
+                .ConfigureAwait(false);
 
             sw.Stop();
 
@@ -78,9 +90,12 @@ public class SimpleBackgroundWorkerHost : BackgroundService
             _logger.LogInformation(
                 "Received new work item {Name} ({Guid}) with {AvailableWorkerCount} available workers", workItem.Name, guid,
                 _semaphore.CurrentCount);
-            
-            // Wait for free capacity
-            await _semaphore.WaitAsync(stoppingToken);
+
+            if (!workItem.IsLongRunning)
+            {
+                // Wait for free capacity
+                await _semaphore.WaitAsync(stoppingToken);
+            }
 
             // Create a job and add it to the dictionary of 'running' jobs
             _running.TryAdd(guid, Run(guid, workItem, stoppingToken));
