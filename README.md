@@ -13,27 +13,33 @@ var host = new HostBuilder()
 
 await host.StartAsync();
 
-// Start producing some work
 var bgWorker = host.Services.GetRequiredService<ISimpleBackgroundWorkerWriter>();
 
-await bgWorker.QueueAsync(async t =>
-  {
-      Console.WriteLine($"[{DateTime.Now}] 1: Doing some heavy lifting in the background, baby!");
-      await Task.Delay(1000);
-      Console.WriteLine($"[{DateTime.Now}] 1: Done and dusted");
-  });
+// Create some work items
+var workItems = Enumerable.Range(1, 10)
+      .Select(i => new BackgroundWorkItem(
+         // Describe the work that must be executed
+         async cancellationToken =>
+         {
+             Console.WriteLine($"[{DateTime.Now}] Job {i}: Doing some heavy lifting in the background, baby!");
+             await Task.Delay(1000, cancellationToken);
+             Console.WriteLine($"[{DateTime.Now}] Job {i}: Done and dusted");
+         },
+         // Optional: Provide a name
+         $"Job {i}",
+         // Optional: Error call back
+         e => 
+         {
+            Console.Writeline($"Oops: {e.Message}");
+            
+            return Task.Completed;
+         })
+      .ToArray();
 
-await bgWorker.QueueAsync(async t =>
-  {
-      Console.WriteLine($"[{DateTime.Now}] 2: Doing some heavy lifting in the background, baby!");
-      await Task.Delay(1000);
-      Console.WriteLine($"[{DateTime.Now}] 2: Done and dusted");
-  });
+// Dispatch
+await bgWorker.QueueAsync(workItems);
+// or: bgWorker.TryQueue(workItems);
 
-await bgWorker.QueueAsync(async t =>
-  {
-      Console.WriteLine($"[{DateTime.Now}] 3: Doing some heavy lifting in the background, baby!");
-      await Task.Delay(1000);
-      Console.WriteLine($"[{DateTime.Now}] 3: Done and dusted");
-  });
+// Watch the work being done (2 at the same time at most)
+Console.Read();
 ```
