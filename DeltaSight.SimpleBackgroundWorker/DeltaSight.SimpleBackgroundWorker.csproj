@@ -5,7 +5,7 @@
         <Nullable>enable</Nullable>
         <Title>DeltaSight.SimpleBackgroundWorker</Title>
         <Authors>Bas Timmermans</Authors>
-        <Version>2.0.1</Version>
+        <Version>2.1.0</Version>
         <Description>A very simple and light weight background worker queue that respects a maximum degree of parallelism.</Description>
         <Company>Deltasight</Company>
         <PackageProjectUrl>https://github.com/bt-88/Deltasight.SimpleBackgroundWorker</PackageProjectUrl>
