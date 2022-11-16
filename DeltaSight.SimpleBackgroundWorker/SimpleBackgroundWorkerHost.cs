@@ -30,7 +30,7 @@ public class SimpleBackgroundWorkerHost : BackgroundService
 
             var sw = Stopwatch.StartNew();
 
-            await workItem.Execute(stoppingToken);
+            await workItem.Execute(stoppingToken).ConfigureAwait(false);
 
             sw.Stop();
 
