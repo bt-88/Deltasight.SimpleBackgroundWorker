@@ -22,43 +22,57 @@ public class SimpleBackgroundWorkerHost : BackgroundService
         _semaphore = new SemaphoreSlim(mdop, mdop);
     }
 
-    private async Task Run(Guid guid, BackgroundWorkItem workItem, CancellationToken stoppingToken)
+    private async Task Run(BackgroundWorkItem workItem, CancellationToken stoppingToken)
     {
+        // Wait for worker first
         try
         {
-            _logger.LogInformation("Starting work item {Name} ({Guid})", workItem.Name, guid);
-
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            await WaitForWorker(workItem, stoppingToken);
+        }
+        catch
+        {
+            // Remove myself from the 'running' jobs
+            _running.Remove(workItem.Guid, out _);
             
+            // Stop
+            return;
+        }
+        
+        // Now execute work item
+        try
+        {
             var sw = Stopwatch.StartNew();
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
 
             if (workItem.CancelAfter.HasValue)
             {
                 cts.CancelAfter(workItem.CancelAfter.Value);
             }
 
-            await Task.Factory.StartNew(
+            var task = await Task.Factory.StartNew(
                     () => workItem.Execute(cts.Token),
                     workItem.IsLongRunning
                         ? TaskCreationOptions.None
-                        : TaskCreationOptions.LongRunning)
-                .ConfigureAwait(false);
+                        : TaskCreationOptions.LongRunning).ConfigureAwait(false);
 
+            await task;
+            
             sw.Stop();
 
-            _logger.LogInformation("Completed work item {Name} ({Guid}) in {Ms}ms", workItem.Name, guid,
+            _logger.LogInformation("Completed work item {Name} ({Guid}) in {Ms}ms", workItem.Name, workItem.Guid,
                 sw.ElapsedMilliseconds);
-
-            // Remove myself from the 'running' jobs
-            _running.Remove(guid, out _);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException e)
         {
-            // Ignore exception that is thrown on cancelling
+            if (workItem.CancelAfter is not null)
+            {
+                _logger.LogError(e, "Work item {Name} ({Guid}) execution cancelled because operation took longer than {CancelAfter}", workItem.Name, workItem.Guid, workItem.CancelAfter.Value);
+            }
+
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Work item {Name} ({Guid}) failed with message: {Message}", workItem.Name, guid,
+            _logger.LogError(e, "Work item {Name} ({Guid}) execution faulted with message: {Message}", workItem.Name, workItem.Guid,
                 e.Message);
 
             try
@@ -70,35 +84,45 @@ public class SimpleBackgroundWorkerHost : BackgroundService
             }
             catch (Exception e2)
             {
-                _logger.LogError(e2, "The error callback for {Name} ({Guid}) faulted", workItem.Name, guid);
+                _logger.LogError(e2, "The error callback for {Name} ({Guid}) faulted", workItem.Name, workItem.Guid);
             }
         }
         finally
         {
-            _semaphore.Release();
+            // Remove myself from the 'running' jobs
+            _running.Remove(workItem.Guid, out _);
+            
+            // Release worker
+            ReleaseWorker(workItem);
         }
     }
 
+    private async ValueTask WaitForWorker(BackgroundWorkItem item, CancellationToken cancellationToken)
+    {
+        if (item.IsLongRunning) return;
+        
+        await _semaphore.WaitAsync(cancellationToken);
+    }
+
+    private void ReleaseWorker(BackgroundWorkItem item)
+    {
+        if (item.IsLongRunning) return;
+
+        _semaphore.Release();
+    }
+    
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             var workItem = await _queue.DequeueAsync(stoppingToken);
-         
-            var guid = Guid.NewGuid();
 
             _logger.LogInformation(
-                "Received new work item {Name} ({Guid}) with {AvailableWorkerCount} available workers", workItem.Name, guid,
+                "Received new work item {Name} ({Guid}) with {AvailableWorkerCount} available workers", workItem.Name, workItem.Guid,
                 _semaphore.CurrentCount);
 
-            if (!workItem.IsLongRunning)
-            {
-                // Wait for free capacity
-                await _semaphore.WaitAsync(stoppingToken);
-            }
-
             // Create a job and add it to the dictionary of 'running' jobs
-            _running.TryAdd(guid, Run(guid, workItem, stoppingToken));
+            _running.TryAdd(workItem.Guid, Run(workItem, stoppingToken));
         }
         
         // Wait for the running jobs to finish

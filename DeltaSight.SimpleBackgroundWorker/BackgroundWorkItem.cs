@@ -11,6 +11,8 @@ public struct BackgroundWorkItem
         CancelAfter = cancelAfter;
     }
 
+    public Guid Guid { get; } = Guid.NewGuid();
+    
     public string Name { get; }
     public Func<CancellationToken, Task> Execute { get; }
     public Func<Exception, Task>? OnError { get; } = null;
