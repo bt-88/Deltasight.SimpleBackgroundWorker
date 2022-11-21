@@ -22,7 +22,7 @@ var bgWorker = host.Services.GetRequiredService<ISimpleBackgroundWorkerWriter>()
 
 // Create some work tiems
 var workItems = Enumerable.Range(1, 10)
-      .Select(i => new BackgroundWorkItem(
+      .Select(i => BackgroundWorkItem.Create(
          // Describe the work that must be executed
          async cancellationToken =>
          {
