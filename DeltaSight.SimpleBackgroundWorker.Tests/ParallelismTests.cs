@@ -32,17 +32,18 @@ public class Tests
         var bgWorker = host.Services.GetRequiredService<ISimpleBackgroundWorkerWriter>();
         
         var jobs = Enumerable.Range(1, count)
-            .Select(i => new BackgroundWorkItem(async t =>
-            {
-                await Task.Delay(jobTimeMs, t);
-                ended.Add(DateTime.Now);
-                semaphore.Release();
-            }, $"Job {i}", e =>
-            {
-                Assert.Fail(e.Message);
+            .Select(i => BackgroundWorkItem.Create(
+                async t =>
+                {
+                    await Task.Delay(jobTimeMs, t);
+                    ended.Add(DateTime.Now);
+                    semaphore.Release();
+                }, $"Job {i}", e =>
+                {
+                    Assert.Fail(e.Message);
 
-                return Task.CompletedTask;
-            }))
+                    return Task.CompletedTask;
+                }))
             .ToArray();
 
         await bgWorker.QueueAsync(jobs);

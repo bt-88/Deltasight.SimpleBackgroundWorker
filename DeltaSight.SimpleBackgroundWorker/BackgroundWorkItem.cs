@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace DeltaSight.SimpleBackgroundWorker;
 
 public struct BackgroundWorkItem
@@ -27,4 +29,14 @@ public struct BackgroundWorkItem
     /// If set, the job will be cancelled automatically if the execution takes longer
     /// </summary>
     public TimeSpan? CancelAfter { get; }
+
+    public static BackgroundWorkItem Create(Func<CancellationToken, Task> executeWork,
+       [CallerArgumentExpression("executeWork")] string name = "Untitled",
+        Func<Exception, Task>? errorCallback = null,
+        bool isLongRunning = false,
+        TimeSpan? cancelAfter = null
+        )
+    {
+        return new BackgroundWorkItem(executeWork, name, errorCallback, isLongRunning, cancelAfter);
+    }
 }
