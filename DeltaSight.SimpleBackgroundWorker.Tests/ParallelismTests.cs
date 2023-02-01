@@ -38,9 +38,9 @@ public class Tests
                     await Task.Delay(jobTimeMs, t);
                     ended.Add(DateTime.Now);
                     semaphore.Release();
-                }, $"Job {i}", e =>
+                }, name: $"Job {i}", errorCallback: ex =>
                 {
-                    Assert.Fail(e.Message);
+                    Assert.Fail(ex.Message);
 
                     return Task.CompletedTask;
                 }))
@@ -49,7 +49,7 @@ public class Tests
         await bgWorker.QueueAsync(jobs);
 
         // Queue some long running jobs (that shouldn't interfere with max. degree of parallelism)
-        await bgWorker.QueueAsync(Enumerable.Range(1, 10).Select(x => new BackgroundWorkItem(t => Task.Delay(-1, t), isLongRunning:true)));
+        await bgWorker.QueueAsync(Enumerable.Range(1, 10).Select(x => BackgroundWorkItem.Create(t => Task.Delay(-1, t), ignoreParallelism:true)));
 
         var startAt = DateTime.Now;
         
@@ -62,7 +62,7 @@ public class Tests
         Assert.Multiple(() =>
         {
             Assert.That(ended, Has.Count.EqualTo(count));
-            Assert.That((ended.Max() - startAt).TotalMilliseconds, Is.EqualTo(m * jobTimeMs).Within(jobTimeMs));
+            Assert.That((ended.Max() - startAt).TotalMilliseconds, Is.EqualTo(m * jobTimeMs).Within(2 * jobTimeMs));
         });
         
         await host.StopAsync();

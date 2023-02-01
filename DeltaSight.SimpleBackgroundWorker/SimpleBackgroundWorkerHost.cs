@@ -51,9 +51,7 @@ public class SimpleBackgroundWorkerHost : BackgroundService
 
             var task = await Task.Factory.StartNew(
                     () => workItem.Execute(cts.Token),
-                    workItem.IsLongRunning
-                        ? TaskCreationOptions.None
-                        : TaskCreationOptions.LongRunning).ConfigureAwait(false);
+                    workItem.Options).ConfigureAwait(false);
 
             await task;
             
@@ -99,14 +97,14 @@ public class SimpleBackgroundWorkerHost : BackgroundService
 
     private async ValueTask WaitForWorker(BackgroundWorkItem item, CancellationToken cancellationToken)
     {
-        if (item.IsLongRunning) return;
+        if (item.IgnoreParallelism) return;
         
         await _semaphore.WaitAsync(cancellationToken);
     }
 
     private void ReleaseWorker(BackgroundWorkItem item)
     {
-        if (item.IsLongRunning) return;
+        if (item.IgnoreParallelism) return;
 
         _semaphore.Release();
     }
