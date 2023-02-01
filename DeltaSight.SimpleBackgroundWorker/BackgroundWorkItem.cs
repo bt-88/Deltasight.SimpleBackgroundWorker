@@ -4,13 +4,14 @@ namespace DeltaSight.SimpleBackgroundWorker;
 
 public struct BackgroundWorkItem
 {
-    public BackgroundWorkItem(Func<CancellationToken, Task> execute, string name = "Untitled", Func<Exception, Task>? onError = null, bool isLongRunning = false, TimeSpan? cancelAfter = null)
+    private BackgroundWorkItem(Func<CancellationToken, Task> execute, string name, Func<Exception, Task>? onError, bool ignoreParallelism, TaskCreationOptions options, TimeSpan? cancelAfter)
     {
         Name = name;
         Execute = execute;
         OnError = onError;
-        IsLongRunning = isLongRunning;
+        Options = options;
         CancelAfter = cancelAfter;
+        IgnoreParallelism = ignoreParallelism;
     }
 
     public Guid Guid { get; } = Guid.NewGuid();
@@ -19,11 +20,9 @@ public struct BackgroundWorkItem
     public Func<CancellationToken, Task> Execute { get; }
     public Func<Exception, Task>? OnError { get; } = null;
     
-    /// <summary>
-    /// Flag to indicate the task is long running
-    /// <remarks>Long running tasks will not impact maximum degree of parallelism
-    /// </summary>
-    public bool IsLongRunning { get; }
+    public TaskCreationOptions Options { get; }
+    
+    public bool IgnoreParallelism { get; }
 
     /// <summary>
     /// If set, the job will be cancelled automatically if the execution takes longer
@@ -31,12 +30,14 @@ public struct BackgroundWorkItem
     public TimeSpan? CancelAfter { get; }
 
     public static BackgroundWorkItem Create(Func<CancellationToken, Task> executeWork,
-       [CallerArgumentExpression("executeWork")] string name = "Untitled",
+        string? name = null,
         Func<Exception, Task>? errorCallback = null,
-        bool isLongRunning = false,
-        TimeSpan? cancelAfter = null
-        )
+        bool ignoreParallelism = false,
+        TaskCreationOptions options = TaskCreationOptions.None,
+        TimeSpan? cancelAfter = null,
+        [CallerMemberName] string callerMemberName = "",
+        [CallerArgumentExpression("executeWork")] string callerArgumentExpression = "")
     {
-        return new BackgroundWorkItem(executeWork, name, errorCallback, isLongRunning, cancelAfter);
+        return new BackgroundWorkItem(executeWork, name ?? $"{callerMemberName}::{callerArgumentExpression}", errorCallback, ignoreParallelism, options, cancelAfter);
     }
 }
